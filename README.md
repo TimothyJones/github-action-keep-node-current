@@ -59,11 +59,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: your-org/node-version-sync@v1
+        with:
+          # Required to edit workflow files — see the token note below.
+          token: ${{ secrets.SYNC_PAT }}
 ```
 
-> **Permissions:** the job needs `contents: write` and `pull-requests: write`.
-> To let this PR trigger other workflows, supply a PAT or app token via the `token`
-> input instead of the default `GITHUB_TOKEN`.
+> **Token — important.** Because this action edits files under `.github/workflows/`,
+> the default `GITHUB_TOKEN` is **not sufficient**: GitHub refuses pushes that create or
+> update workflow files unless the token has the `workflow` scope. Supply one of the
+> following via the `token` input:
+>
+> - a **classic Personal Access Token** with `repo` + `workflow` scopes, or
+> - a **GitHub App installation token** with `contents: write`, `pull-requests: write`
+>   and `workflows: write`.
+>
+> The default `GITHUB_TOKEN` works only if none of the changed files are workflows
+> (e.g. you limit scope to `.nvmrc` / `package.json`). Using a PAT/app token also lets
+> the opened PR trigger other workflows.
+>
+> The job also needs `permissions: contents: write` and `pull-requests: write`, and the
+> repo setting **Settings → Actions → General → "Allow GitHub Actions to create and
+> approve pull requests"** must be enabled.
 
 ## Inputs
 

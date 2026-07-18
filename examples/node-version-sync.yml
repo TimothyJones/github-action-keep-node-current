@@ -15,5 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: your-org/node-version-sync@v1
-        # with:
-        #   token: ${{ secrets.SYNC_PAT }} # use a PAT/app token to let the PR trigger other workflows
+        with:
+          # A classic PAT with repo + workflow scopes (or a GitHub App token with
+          # contents/pull-requests/workflows write). The default GITHUB_TOKEN cannot
+          # push changes to files under .github/workflows/.
+          token: ${{ secrets.SYNC_PAT }}
