@@ -1,0 +1,40 @@
+name: Self Test
+# Manually runs this action against its own repository to exercise the real
+# GitHub Actions runtime (token, permissions, PR creation). Defaults to dry-run.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Compute changes without committing or opening a PR"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build action bundle
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm run build
+      - name: Run node-version-sync on this repo
+        id: sync
+        uses: ./
+        with:
+          dry-run: ${{ inputs.dry-run }}
+          branch: test/node-version-sync
+      - name: Summary
+        run: |
+          {
+            echo "### node-version-sync result"
+            echo "- changed: ${{ steps.sync.outputs.changed }}"
+            echo "- added: ${{ steps.sync.outputs.added }}"
+            echo "- removed: ${{ steps.sync.outputs.removed }}"
+            echo "- PR: ${{ steps.sync.outputs.pr-url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
