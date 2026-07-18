@@ -40887,7 +40887,14 @@ var exec = __nccwpck_require__(5236);
 
 
 async function git(cwd, args) {
-    const out = await exec.getExecOutput("git", args, { cwd, silent: true });
+    const out = await exec.getExecOutput("git", args, {
+        cwd,
+        silent: true,
+        ignoreReturnCode: true,
+    });
+    if (out.exitCode !== 0) {
+        throw new Error(`git ${args.join(" ")} failed (exit ${out.exitCode}): ${out.stderr.trim() || out.stdout.trim()}`);
+    }
     return out.stdout.trim();
 }
 /**
@@ -40901,9 +40908,10 @@ async function commitAndPush(result, opts) {
     const remote = opts.remoteUrl ??
         `https://x-access-token:${opts.token}@github.com/${opts.owner}/${opts.repo}.git`;
     await git(opts.cwd, ["remote", "set-url", "origin", remote]);
-    // Start the working branch from the base branch.
-    await git(opts.cwd, ["fetch", "origin", opts.base, "--depth=1"]);
-    await git(opts.cwd, ["checkout", "-B", opts.branch, `origin/${opts.base}`]);
+    // Create the working branch at the current checkout (the base ref the workflow ran on).
+    // Branching from HEAD avoids relying on an `origin/<base>` tracking ref, which
+    // actions/checkout does not create for shallow single-ref clones.
+    await git(opts.cwd, ["checkout", "-B", opts.branch]);
     const contents = new Map(result.originals);
     for (const group of result.groups) {
         for (const plan of group.plans) {

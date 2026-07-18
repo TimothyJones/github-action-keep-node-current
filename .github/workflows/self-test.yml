@@ -18,11 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build action bundle
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci && npm run build
       - name: Run node-version-sync on this repo
         id: sync
         uses: ./
