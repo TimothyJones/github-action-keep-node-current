@@ -48,5 +48,5 @@ outputs:
     description: "Number of the created or updated pull request (empty if none)."
 
 runs:
-  using: "node20"
+  using: "node24"
   main: "dist/index.js"
