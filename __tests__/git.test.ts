@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { reconcileRepo } from "../src/core.js";
 import { discover } from "../src/discover.js";
-import { commitAndPush } from "../src/git.js";
+import { commitAndPush, configureAuth } from "../src/git.js";
 import { buildSchedule, type RawSchedule } from "../src/schedule.js";
 
 const rawSchedule = JSON.parse(
@@ -86,5 +86,52 @@ describe("commitAndPush", () => {
     // Final tree on the branch reflects all reconciled changes.
     const finalNvmrc = git(origin, "show", "chore/node-version-sync:.nvmrc");
     expect(finalNvmrc).toBe("24");
+  });
+
+  it("configureAuth removes every persisted extraheader and leaves exactly one for the token", async () => {
+    const work = join(scratch, "auth");
+    mkdirSync(work, { recursive: true });
+    git(work, "init", "--initial-branch=main");
+    // Simulate actions/checkout persisting the GITHUB_TOKEN, plus a second matching
+    // header (the shape that caused "Duplicate header: Authorization").
+    git(
+      work,
+      "config",
+      "--local",
+      "http.https://github.com/.extraheader",
+      "AUTHORIZATION: basic OLD1",
+    );
+    git(
+      work,
+      "config",
+      "--local",
+      "--add",
+      "http.https://github.com/acme/widgets.extraheader",
+      "AUTHORIZATION: basic OLD2",
+    );
+
+    await configureAuth(work, "MYTOKEN");
+
+    const keys = git(
+      work,
+      "config",
+      "--local",
+      "--name-only",
+      "--get-regexp",
+      "^http\\..*\\.extraheader$",
+    )
+      .split("\n")
+      .filter(Boolean);
+    expect(keys).toEqual(["http.https://github.com/.extraheader"]);
+
+    const value = git(
+      work,
+      "config",
+      "--local",
+      "--get",
+      "http.https://github.com/.extraheader",
+    );
+    const expected = `AUTHORIZATION: basic ${Buffer.from("x-access-token:MYTOKEN").toString("base64")}`;
+    expect(value).toBe(expected);
   });
 });

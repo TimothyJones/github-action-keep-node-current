@@ -29,6 +29,57 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return out.stdout.trim();
 }
 
+/** Run git, tolerating a non-zero exit (e.g. `--unset-all` on a missing key). */
+async function gitTry(
+  cwd: string,
+  args: string[],
+): Promise<{ code: number; stdout: string }> {
+  const out = await exec.getExecOutput("git", args, {
+    cwd,
+    silent: true,
+    ignoreReturnCode: true,
+  });
+  return { code: out.exitCode, stdout: out.stdout };
+}
+
+/**
+ * Authenticate git as the supplied token. actions/checkout persists the workflow's
+ * GITHUB_TOKEN as one or more `http.<url>.extraheader` entries; those override URL
+ * credentials, can't modify workflow files, and — when more than one matches the push
+ * URL — cause GitHub to reject the push with `Duplicate header: "Authorization"`.
+ * So we remove every persisted extraheader and set exactly one with our token.
+ */
+export async function configureAuth(cwd: string, token: string): Promise<void> {
+  const listed = await gitTry(cwd, [
+    "config",
+    "--local",
+    "--name-only",
+    "--get-regexp",
+    "^http\\..*\\.extraheader$",
+  ]);
+  const keys =
+    listed.code === 0
+      ? [
+          ...new Set(
+            listed.stdout
+              .split("\n")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          ),
+        ]
+      : [];
+  for (const key of keys) {
+    await gitTry(cwd, ["config", "--local", "--unset-all", key]);
+  }
+  const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
+  await git(cwd, [
+    "config",
+    "--local",
+    "http.https://github.com/.extraheader",
+    `AUTHORIZATION: basic ${auth}`,
+  ]);
+}
+
 /**
  * Commit each group as its own commit on a fresh working branch, then force-push.
  * Edits are applied to an in-memory content map and written to disk incrementally
@@ -45,19 +96,7 @@ export async function commitAndPush(
     // Tests push to a local remote (e.g. a bare repo) with no auth needed.
     await git(opts.cwd, ["remote", "set-url", "origin", opts.remoteUrl]);
   } else {
-    // Authenticate as the provided token. actions/checkout persists the workflow's
-    // GITHUB_TOKEN as an http.extraheader, and that header takes precedence over any
-    // credentials embedded in the remote URL. Since the GITHUB_TOKEN cannot modify
-    // workflow files, we must replace that header with the supplied (workflow-scoped)
-    // token so pushes to .github/workflows/ are accepted.
-    const auth = Buffer.from(`x-access-token:${opts.token}`).toString("base64");
-    await git(opts.cwd, [
-      "config",
-      "--local",
-      "--replace-all",
-      "http.https://github.com/.extraheader",
-      `AUTHORIZATION: basic ${auth}`,
-    ]);
+    await configureAuth(opts.cwd, opts.token);
   }
 
   // Create the working branch at the current checkout (the base ref the workflow ran on).
