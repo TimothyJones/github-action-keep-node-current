@@ -64,22 +64,72 @@ jobs:
           token: ${{ secrets.SYNC_PAT }}
 ```
 
-> **Token — important.** Because this action edits files under `.github/workflows/`,
-> the default `GITHUB_TOKEN` is **not sufficient**: GitHub refuses pushes that create or
-> update workflow files unless the token has the `workflow` scope. Supply one of the
-> following via the `token` input:
+> **Token — important.** Because this action edits files under `.github/workflows/`, the
+> default `GITHUB_TOKEN` is **not sufficient** — GitHub refuses pushes that create or
+> update workflow files unless the token has the `workflow` scope. See
+> [Setting up the token](#setting-up-the-token) below.
 >
-> - a **classic Personal Access Token** with `repo` + `workflow` scopes, or
-> - a **GitHub App installation token** with `contents: write`, `pull-requests: write`
->   and `workflows: write`.
->
-> The default `GITHUB_TOKEN` works only if none of the changed files are workflows
-> (e.g. you limit scope to `.nvmrc` / `package.json`). Using a PAT/app token also lets
-> the opened PR trigger other workflows.
->
-> The job also needs `permissions: contents: write` and `pull-requests: write`, and the
-> repo setting **Settings → Actions → General → "Allow GitHub Actions to create and
-> approve pull requests"** must be enabled.
+> (The default `GITHUB_TOKEN` works only if none of the changed files are workflows —
+> e.g. you limit scope to `.nvmrc` / `package.json` via the `paths` input.)
+
+## Setting up the token
+
+The action needs a token with the **`workflow`** scope so it can push workflow-file
+changes and open the PR. Set one up in three steps.
+
+### 1. Create the token
+
+**Option A — Fine-grained PAT (recommended, least privilege):**
+
+1. Go to **Settings → Developer settings → Fine-grained personal access tokens → Generate new token**
+   (<https://github.com/settings/personal-access-tokens/new>).
+2. **Resource owner:** you or your org · **Repository access:** _Only select repositories_ →
+   choose the repo(s) that will run the action.
+3. Under **Permissions → Repository permissions**, set each of these to _Read and write_:
+   - **Contents**
+   - **Pull requests**
+   - **Workflows**
+4. Generate the token and copy it.
+
+**Option B — Classic PAT (simplest):**
+
+1. Go to **Settings → Developer settings → Tokens (classic) → Generate new token**
+   (<https://github.com/settings/tokens/new>).
+2. Select the **`repo`** and **`workflow`** scopes.
+3. Generate the token and copy it.
+
+**Option C — GitHub App token:** an installation token with `contents: write`,
+`pull-requests: write` and `workflows: write` also works, and is a good fit for orgs.
+
+### 2. Store it as a secret
+
+Add the token as a repository (or organisation) secret, e.g. `SYNC_PAT`:
+
+```bash
+gh secret set SYNC_PAT --repo <owner>/<repo>
+# then paste the token when prompted
+```
+
+Or via **Settings → Secrets and variables → Actions → New repository secret**.
+
+### 3. Reference it in the workflow
+
+```yaml
+- uses: your-org/node-version-sync@v1
+  with:
+    token: ${{ secrets.SYNC_PAT }}
+```
+
+### Also required
+
+- The job must grant `permissions: contents: write` and `pull-requests: write`
+  (see the [example](#usage) above).
+- The repo setting **Settings → Actions → General → "Allow GitHub Actions to create and
+  approve pull requests"** must be enabled.
+
+Commits are authored as `github-actions[bot]`; the PR is opened by the token's owner.
+Using a PAT/App token (rather than `GITHUB_TOKEN`) also lets the opened PR trigger other
+workflows, such as CI.
 
 ## Inputs
 
