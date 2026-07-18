@@ -1,0 +1,52 @@
+name: "Node Version Sync"
+description: "Keep the repository's declared Node.js versions in sync with the official Node.js release schedule, opening a PR with the changes."
+author: "Timothy Jones"
+branding:
+  icon: "refresh-cw"
+  color: "green"
+
+inputs:
+  token:
+    description: "Token used to push the branch and open the pull request. Defaults to the workflow token."
+    required: false
+    default: ${{ github.token }}
+  schedule-url:
+    description: "URL (or local file path) of the Node.js release schedule JSON."
+    required: false
+    default: "https://raw.githubusercontent.com/nodejs/Release/refs/heads/main/schedule.json"
+  base:
+    description: "Base branch the pull request targets. Defaults to the repository's default branch."
+    required: false
+    default: ""
+  branch:
+    description: "Working branch the action commits to and opens the PR from."
+    required: false
+    default: "chore/node-version-sync"
+  paths:
+    description: "Optional newline- or comma-separated glob overrides for the files to scan. Defaults to workflows, composite actions, .nvmrc and package.json."
+    required: false
+    default: ""
+  dry-run:
+    description: "When true, compute and log the changes but do not commit, push, or open a PR."
+    required: false
+    default: "false"
+  now:
+    description: "Override the current date (YYYY-MM-DD) used to evaluate the schedule. Intended for testing."
+    required: false
+    default: ""
+
+outputs:
+  changed:
+    description: "'true' if any Node version changes were made."
+  added:
+    description: "Comma-separated list of Node major versions for which support was added."
+  removed:
+    description: "Comma-separated list of Node major versions for which support was dropped."
+  pr-url:
+    description: "URL of the created or updated pull request (empty if none)."
+  pr-number:
+    description: "Number of the created or updated pull request (empty if none)."
+
+runs:
+  using: "node20"
+  main: "dist/index.js"
