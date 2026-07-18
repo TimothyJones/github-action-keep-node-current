@@ -1,4 +1,4 @@
-# Node Version Sync
+# Keep Node Current
 
 A GitHub Action that keeps the Node.js versions declared across your repository in
 sync with the [official Node.js release schedule](https://github.com/nodejs/Release),
@@ -47,7 +47,7 @@ Run it on a schedule so your matrices stay current automatically:
 
 ```yaml
 # .github/workflows/node-version-sync.yml
-name: Node Version Sync
+name: Keep Node Current
 on:
   schedule:
     - cron: "0 6 * * 1" # every Monday
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: your-org/node-version-sync@v1
+      - uses: TimothyJones/github-action-keep-node-current@v1
         with:
           # Required to edit workflow files — see the token note below.
           token: ${{ secrets.SYNC_PAT }}
@@ -119,7 +119,7 @@ Or via **Settings → Secrets and variables → Actions → New repository secre
 ### 3. Reference it in the workflow
 
 ```yaml
-- uses: your-org/node-version-sync@v1
+- uses: TimothyJones/github-action-keep-node-current@v1
   with:
     token: ${{ secrets.SYNC_PAT }}
 ```

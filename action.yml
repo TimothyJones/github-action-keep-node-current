@@ -1,4 +1,4 @@
-name: "Node Version Sync"
+name: "Keep Node Current"
 description: "Keep the repository's declared Node.js versions in sync with the official Node.js release schedule, opening a PR with the changes."
 author: "Timothy Jones"
 branding:

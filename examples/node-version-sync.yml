@@ -1,5 +1,5 @@
 # Copy this into a consuming repository at .github/workflows/node-version-sync.yml
-name: Node Version Sync
+name: Keep Node Current
 on:
   schedule:
     - cron: "0 6 * * 1" # every Monday at 06:00 UTC
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: your-org/node-version-sync@v1
+      - uses: TimothyJones/github-action-keep-node-current@v1
         with:
           # A classic PAT with repo + workflow scopes (or a GitHub App token with
           # contents/pull-requests/workflows write). The default GITHUB_TOKEN cannot
