@@ -4,12 +4,8 @@ import { applyAll, reconcileRepo } from "./core.js";
 import { classifyOverrides, discover, type Discovered } from "./discover.js";
 import { prTitle } from "./reconcile.js";
 import { buildSchedule, fetchSchedule } from "./schedule.js";
-import { commitAndPush } from "./git.js";
-import { buildPrBody, upsertPullRequest } from "./pr.js";
-
-const DEFAULT_USER_NAME = "github-actions[bot]";
-const DEFAULT_USER_EMAIL =
-  "41898282+github-actions[bot]@users.noreply.github.com";
+import { buildPrBody } from "./pr.js";
+import { publishChanges } from "./publish.js";
 
 function parseNow(raw: string): Date {
   if (!raw.trim()) return new Date();
@@ -82,28 +78,25 @@ async function run(): Promise<void> {
     return;
   }
 
-  await commitAndPush(result, {
-    cwd: root,
-    branch,
-    base,
-    owner,
-    repo,
-    token,
-    userName: DEFAULT_USER_NAME,
-    userEmail: DEFAULT_USER_EMAIL,
-  });
-
-  const pr = await upsertPullRequest({
-    token,
+  const octokit = github.getOctokit(token);
+  const pr = await publishChanges(octokit, result, {
     owner,
     repo,
     base,
     branch,
+    root,
     title,
     body: buildPrBody(result.groups, scheduleUrl),
   });
 
-  core.info(`Pull request ready: ${pr.url}`);
+  if (!pr) {
+    core.info("No net changes to publish.");
+    core.setOutput("pr-url", "");
+    core.setOutput("pr-number", "");
+    return;
+  }
+
+  core.info(`Published ${pr.commits} commit(s). Pull request ready: ${pr.url}`);
   core.setOutput("pr-url", pr.url);
   core.setOutput("pr-number", String(pr.number));
 }

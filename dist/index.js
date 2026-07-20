@@ -40895,114 +40895,9 @@ async function fetchSchedule(source) {
     return parsed;
 }
 
-// EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js
-var exec = __nccwpck_require__(5236);
-;// CONCATENATED MODULE: ./src/git.ts
-
-
-async function git(cwd, args) {
-    const out = await exec.getExecOutput("git", args, {
-        cwd,
-        silent: true,
-        ignoreReturnCode: true,
-    });
-    if (out.exitCode !== 0) {
-        throw new Error(`git ${args.join(" ")} failed (exit ${out.exitCode}): ${out.stderr.trim() || out.stdout.trim()}`);
-    }
-    return out.stdout.trim();
-}
-/** Run git, tolerating a non-zero exit (e.g. `--unset-all` on a missing key). */
-async function gitTry(cwd, args) {
-    const out = await exec.getExecOutput("git", args, {
-        cwd,
-        silent: true,
-        ignoreReturnCode: true,
-    });
-    return { code: out.exitCode, stdout: out.stdout };
-}
-/**
- * Authenticate git as the supplied token. actions/checkout persists the workflow's
- * GITHUB_TOKEN as one or more `http.<url>.extraheader` entries; those override URL
- * credentials, can't modify workflow files, and — when more than one matches the push
- * URL — cause GitHub to reject the push with `Duplicate header: "Authorization"`.
- * So we remove every persisted extraheader and set exactly one with our token.
- */
-async function configureAuth(cwd, token) {
-    const listed = await gitTry(cwd, [
-        "config",
-        "--local",
-        "--name-only",
-        "--get-regexp",
-        "^http\\..*\\.extraheader$",
-    ]);
-    const keys = listed.code === 0
-        ? [
-            ...new Set(listed.stdout
-                .split("\n")
-                .map((s) => s.trim())
-                .filter(Boolean)),
-        ]
-        : [];
-    for (const key of keys) {
-        await gitTry(cwd, ["config", "--local", "--unset-all", key]);
-    }
-    const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
-    await git(cwd, [
-        "config",
-        "--local",
-        "http.https://github.com/.extraheader",
-        `AUTHORIZATION: basic ${auth}`,
-    ]);
-}
-/**
- * Commit each group as its own commit on a fresh working branch, then force-push.
- * Edits are applied to an in-memory content map and written to disk incrementally
- * so each commit contains only that version's changes.
- */
-async function commitAndPush(result, opts) {
-    await git(opts.cwd, ["config", "user.name", opts.userName]);
-    await git(opts.cwd, ["config", "user.email", opts.userEmail]);
-    if (opts.remoteUrl) {
-        // Tests push to a local remote (e.g. a bare repo) with no auth needed.
-        await git(opts.cwd, ["remote", "set-url", "origin", opts.remoteUrl]);
-    }
-    else {
-        await configureAuth(opts.cwd, opts.token);
-    }
-    // Create the working branch at the current checkout (the base ref the workflow ran on).
-    // Branching from HEAD avoids relying on an `origin/<base>` tracking ref, which
-    // actions/checkout does not create for shallow single-ref clones.
-    await git(opts.cwd, ["checkout", "-B", opts.branch]);
-    const contents = new Map(result.originals);
-    for (const group of result.groups) {
-        for (const plan of group.plans) {
-            const current = contents.get(plan.path) ?? "";
-            const updated = plan.apply(current, {
-                kind: group.kind,
-                major: group.major,
-            });
-            contents.set(plan.path, updated);
-            await (0,promises_namespaceObject.writeFile)(plan.path, updated, "utf8");
-            await git(opts.cwd, ["add", plan.path]);
-        }
-        // Defensive: never fail the run on an empty commit if a group staged no net change.
-        const staged = await exec.getExecOutput("git", ["diff", "--cached", "--quiet"], {
-            cwd: opts.cwd,
-            silent: true,
-            ignoreReturnCode: true,
-        });
-        if (staged.exitCode !== 0) {
-            await git(opts.cwd, ["commit", "-m", group.message]);
-        }
-    }
-    await git(opts.cwd, ["push", "--force", "origin", opts.branch]);
-}
-
 ;// CONCATENATED MODULE: ./src/pr.ts
-
 /** Create the PR, or update the existing open one from the same head branch. */
-async function upsertPullRequest(opts) {
-    const octokit = github.getOctokit(opts.token);
+async function upsertPullRequest(octokit, opts) {
     const head = `${opts.owner}:${opts.branch}`;
     const existing = await octokit.rest.pulls.list({
         owner: opts.owner,
@@ -41055,6 +40950,112 @@ function buildPrBody(groups, scheduleUrl) {
     return lines.join("\n");
 }
 
+;// CONCATENATED MODULE: ./src/publish.ts
+
+
+// Commits are attributed to the GitHub Actions bot rather than the token owner.
+const AUTHOR = {
+    name: "github-actions[bot]",
+    email: "41898282+github-actions[bot]@users.noreply.github.com",
+};
+/** Convert an absolute plan path into a POSIX repo-relative path for the Git tree API. */
+function repoPath(root, absPath) {
+    return (0,external_node_path_namespaceObject.relative)(root, absPath).split(external_node_path_namespaceObject.sep).join("/");
+}
+/**
+ * Publish the reconciled changes entirely through the GitHub Git Data API: build one
+ * commit per version change on top of the base branch, point the working branch at the
+ * result, and open/update the PR. No local git or credential handling is involved, so
+ * this is immune to how actions/checkout persists credentials.
+ */
+async function publishChanges(octokit, result, opts) {
+    const { owner, repo, base, branch, root } = opts;
+    const baseRef = await octokit.rest.git.getRef({
+        owner,
+        repo,
+        ref: `heads/${base}`,
+    });
+    let parentCommit = baseRef.data.object.sha;
+    const baseCommit = await octokit.rest.git.getCommit({
+        owner,
+        repo,
+        commit_sha: parentCommit,
+    });
+    let parentTree = baseCommit.data.tree.sha;
+    const contents = new Map(result.originals);
+    let commits = 0;
+    for (const group of result.groups) {
+        const entries = [];
+        for (const plan of group.plans) {
+            const current = contents.get(plan.path) ?? "";
+            const updated = plan.apply(current, {
+                kind: group.kind,
+                major: group.major,
+            });
+            if (updated !== current) {
+                contents.set(plan.path, updated);
+                entries.push({
+                    path: repoPath(root, plan.path),
+                    mode: "100644",
+                    type: "blob",
+                    content: updated,
+                });
+            }
+        }
+        // Skip groups whose edits produced no net change (e.g. the add paired with a pin
+        // bump already applied by its drop) rather than creating an empty commit.
+        if (entries.length === 0)
+            continue;
+        const tree = await octokit.rest.git.createTree({
+            owner,
+            repo,
+            base_tree: parentTree,
+            tree: entries,
+        });
+        const commit = await octokit.rest.git.createCommit({
+            owner,
+            repo,
+            message: group.message,
+            tree: tree.data.sha,
+            parents: [parentCommit],
+            author: AUTHOR,
+            committer: AUTHOR,
+        });
+        parentCommit = commit.data.sha;
+        parentTree = tree.data.sha;
+        commits++;
+    }
+    if (commits === 0)
+        return null;
+    // Point the working branch at the new commit, creating it if it does not exist.
+    try {
+        await octokit.rest.git.updateRef({
+            owner,
+            repo,
+            ref: `heads/${branch}`,
+            sha: parentCommit,
+            force: true,
+        });
+    }
+    catch {
+        await octokit.rest.git.createRef({
+            owner,
+            repo,
+            ref: `refs/heads/${branch}`,
+            sha: parentCommit,
+        });
+    }
+    const pr = await upsertPullRequest(octokit, {
+        owner,
+        repo,
+        base,
+        branch,
+        title: opts.title,
+        body: opts.body,
+    });
+    return { ...pr, commits };
+}
+
 ;// CONCATENATED MODULE: ./src/index.ts
 
 
@@ -41064,8 +41065,6 @@ function buildPrBody(groups, scheduleUrl) {
 
 
 
-const DEFAULT_USER_NAME = "github-actions[bot]";
-const DEFAULT_USER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
 function parseNow(raw) {
     if (!raw.trim())
         return new Date();
@@ -41123,26 +41122,23 @@ async function run() {
         core.setOutput("pr-number", "");
         return;
     }
-    await commitAndPush(result, {
-        cwd: root,
-        branch,
-        base,
-        owner,
-        repo,
-        token,
-        userName: DEFAULT_USER_NAME,
-        userEmail: DEFAULT_USER_EMAIL,
-    });
-    const pr = await upsertPullRequest({
-        token,
+    const octokit = github.getOctokit(token);
+    const pr = await publishChanges(octokit, result, {
         owner,
         repo,
         base,
         branch,
+        root,
         title,
         body: buildPrBody(result.groups, scheduleUrl),
     });
-    core.info(`Pull request ready: ${pr.url}`);
+    if (!pr) {
+        core.info("No net changes to publish.");
+        core.setOutput("pr-url", "");
+        core.setOutput("pr-number", "");
+        return;
+    }
+    core.info(`Published ${pr.commits} commit(s). Pull request ready: ${pr.url}`);
     core.setOutput("pr-url", pr.url);
     core.setOutput("pr-number", String(pr.number));
 }

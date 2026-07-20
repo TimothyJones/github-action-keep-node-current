@@ -1,8 +1,9 @@
-import * as github from "@actions/github";
+import type { getOctokit } from "@actions/github";
 import type { CommitGroup } from "./reconcile.js";
 
+export type Octokit = ReturnType<typeof getOctokit>;
+
 export interface PrOptions {
-  token: string;
   owner: string;
   repo: string;
   base: string;
@@ -17,8 +18,10 @@ export interface PrResult {
 }
 
 /** Create the PR, or update the existing open one from the same head branch. */
-export async function upsertPullRequest(opts: PrOptions): Promise<PrResult> {
-  const octokit = github.getOctokit(opts.token);
+export async function upsertPullRequest(
+  octokit: Octokit,
+  opts: PrOptions,
+): Promise<PrResult> {
   const head = `${opts.owner}:${opts.branch}`;
 
   const existing = await octokit.rest.pulls.list({

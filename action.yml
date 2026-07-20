@@ -7,7 +7,7 @@ branding:
 
 inputs:
   token:
-    description: "Token used to push the branch and open the pull request. Defaults to the workflow token."
+    description: "Token used to create the commits/branch and open the pull request via the GitHub API. Needs the workflow scope to edit workflow files. Defaults to the workflow token."
     required: false
     default: ${{ github.token }}
   schedule-url:

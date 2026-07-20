@@ -69,7 +69,7 @@ jobs:
 ```
 
 > **Token — important.** Because this action edits files under `.github/workflows/`, the
-> default `GITHUB_TOKEN` is **not sufficient** — GitHub refuses pushes that create or
+> default `GITHUB_TOKEN` is **not sufficient** — GitHub refuses commits that create or
 > update workflow files unless the token has the `workflow` scope. See
 > [Setting up the token](#setting-up-the-token) below.
 >
@@ -78,8 +78,9 @@ jobs:
 
 ## Setting up the token
 
-The action needs a token with the **`workflow`** scope so it can push workflow-file
-changes and open the PR. Set one up in three steps.
+The action commits, branches, and opens the PR entirely through the GitHub API, so it
+needs no special `actions/checkout` configuration — just a token with the **`workflow`**
+scope so it can edit workflow files. Set one up in three steps.
 
 ### 1. Create the token
 
@@ -139,7 +140,7 @@ workflows, such as CI.
 
 | Input          | Default                   | Description                                                                          |
 | -------------- | ------------------------- | ------------------------------------------------------------------------------------ |
-| `token`        | `${{ github.token }}`     | Token used to push the branch and open the PR.                                       |
+| `token`        | `${{ github.token }}`     | Token used to create the commits/branch and open the PR (via the GitHub API).        |
 | `schedule-url` | Node.js `schedule.json`   | URL (or local path) of the release schedule.                                         |
 | `base`         | repo default branch       | Base branch the PR targets.                                                          |
 | `branch`       | `chore/node-version-sync` | Working branch the PR is opened from.                                                |
