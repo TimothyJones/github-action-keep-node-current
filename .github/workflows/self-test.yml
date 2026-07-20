@@ -10,19 +10,25 @@ on:
         default: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  id-token: write # federate this job's identity with Octo STS — no stored secrets
 
 jobs:
   self-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Exchange this workflow's OIDC identity for a short-lived token, per the
+      # trust policy in .github/chainguard/keep-node-current.sts.yaml.
+      - uses: octo-sts/action@main
+        id: octo-sts
+        with:
+          scope: TimothyJones/github-action-keep-node-current
+          identity: keep-node-current
       - name: Run node-version-sync on this repo
         id: sync
         uses: ./
         with:
-          token: ${{ secrets.SYNC_PAT }}
+          token: ${{ steps.octo-sts.outputs.token }}
           dry-run: ${{ inputs.dry-run }}
           branch: test/node-version-sync
       - name: Summary
