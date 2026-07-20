@@ -71,7 +71,7 @@ jobs:
         with:
           scope: <owner>/<repo>
           identity: keep-node-current
-      - uses: TimothyJones/github-action-keep-node-current@v2
+      - uses: TimothyJones/github-action-keep-node-current@v1
         with:
           token: ${{ steps.octo-sts.outputs.token }}
 ```
