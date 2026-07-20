@@ -117,7 +117,11 @@ settings, nothing to expire or rotate. The trust policy is reviewable code.
    job needs `permissions: id-token: write`, the
    [`octo-sts/action`](https://github.com/octo-sts/action) step exchanges the identity
    (`identity` = the policy filename without `.sts.yaml`), and its `token` output goes to
-   this action's `token` input.
+   this action's `token` input. The token is revoked automatically when the job ends.
+
+> **Troubleshooting:** a `subject did not match` error prints the _actual_ OIDC subject —
+> copy it into `subject:` for an exact match. Octo STS caches trust policies for up to
+> **5 minutes**, so give policy edits a few minutes before retrying.
 
 Octo STS is an open-source hosted service by Chainguard; if a third-party broker doesn't
 fit your threat model, use a PAT below (or self-host Octo STS).
